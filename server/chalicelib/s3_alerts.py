@@ -7,7 +7,8 @@ def routes_for_alert(alert):
     try:
         for alert_version in alert["alert_versions"]:
             for informed_entity in alert_version["informed_entity"]:
-                routes.add(informed_entity["route_id"])
+                if "route_id" in informed_entity:
+                    routes.add(informed_entity["route_id"])
     except KeyError as e:
         print(f"Handled KeyError: Couldn't access {e} from alert {alert}")
 
@@ -25,6 +26,6 @@ def get_alerts(day, route):
 
 
 def store_alerts(day):
-    api_data = MbtaPerformanceAPI.get_api_data(day, "pastalerts", {})
+    api_data = MbtaPerformanceAPI.get_api_data("pastalerts", {}, day)
     alerts = json.dumps(api_data).encode("utf8")
     s3.upload(key(day), alerts, True)

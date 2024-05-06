@@ -1,12 +1,12 @@
-name: deploy
+name: deploy_beta
 
 on:
   push:
     branches:
-      - main
+      - beta
 
 jobs:
-  deploy:
+  deploy_beta:
     runs-on: ubuntu-latest
     env:
       AWS_PROFILE: transitmatters
@@ -41,4 +41,4 @@ jobs:
         run: |
           pip install pipenv
           npm install
-          bash deploy.sh
+          bash deploy.sh beta

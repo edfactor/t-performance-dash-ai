@@ -8,14 +8,14 @@ This is the repository for the TransitMatters data dashboard. Client code is wri
 * node 12.x LTS (verify with `node -v`)
 * Python 3.7 with pipenv (verify with `python --version; pipenv --version`)
 
-## Development instructions
+## Development Instructions
 1. Add `MBTA_V2_API_KEY` to your shell environment:
 	* `export MBTA_V2_API_KEY='KEY'` in ~/.bashrc or ~/.zshrc
 2. In the root directory, run `npm install` to install all frontend and backend dependencies
 3. Run `npm start` to start both the JavaScript development server and the Python backend at the same time.
 4. Navigate to [http://localhost:3000](http://localhost:3000) (or the url provided after running `npm start`)
 
-## Deployment instructions
+## Deployment Instructions
 1. Configure AWS CLI 1.x or 2.x with your AWS access key ID and secret under the profile name `transitmatters`.
 2. Configure shell environment variables for AWS ACM domain certificates.
 	* `TM_FRONTEND_CERT_ARN`
@@ -24,7 +24,11 @@ This is the repository for the TransitMatters data dashboard. Client code is wri
 	* `TM_BACKEND_CERT_ARN_BETA`
 	* (You may also need to set `AWS_DEFAULT_REGION` in your shell to `us-east-1`. Maybe not! We're not sure.)
 3. Execute `./deploy.sh` (for production) or `./deploy.sh beta` (for beta).
-	* If you get an error, check the CloudFormation stack status in AWS Console. Good luck!
+
+Additional notes:
+- If you're running this locally, your local MBTA-performance API key (which might be your own) will get uploaded to AWS!
+- If you're on a platform with a non-GNU `sed`, deploy.sh might fail. On macOS, this is fixed by `brew install gnu-sed` and adding it to your PATH.
+- If you get an unexplained error, check the CloudFormation stack status in AWS Console. Good luck!
 
 ### Linting
 To lint frontend and backend code, run `npm run lint` in the root directory

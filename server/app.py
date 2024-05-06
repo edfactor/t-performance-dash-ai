@@ -1,8 +1,9 @@
 import json
 import os
-from chalice import Chalice, Cron, CORSConfig
+import subprocess
+from chalice import Chalice, Cron, CORSConfig, ConflictError, Response
 from datetime import date, timedelta
-from chalicelib import data_funcs, aggregation, s3_alerts
+from chalicelib import data_funcs, aggregation, s3_alerts, secrets
 
 app = Chalice(app_name="data-dashboard")
 
@@ -30,15 +31,6 @@ def parse_user_date(user_date):
     return date(year=year, month=month, day=day)
 
 
-def parse_query_stop_args(query_params, expected_stop_param_names):
-    stops_dict = {}
-    for stop_param in expected_stop_param_names:
-        query_value = query_params.get(stop_param)
-        if query_value:
-            stops_dict[stop_param] = query_value
-    return stops_dict
-
-
 def mutlidict_to_dict(mutlidict):
     res_dict = {}
     for key in mutlidict.keys():
@@ -46,26 +38,51 @@ def mutlidict_to_dict(mutlidict):
     return res_dict
 
 
+@app.route("/healthcheck", cors=cors_config)
+def healthcheck():
+    # These functions must return True or False :-)
+    checks = [
+        lambda: len(secrets.MBTA_V2_API_KEY) > 0,
+        lambda: "2020-11-07 10:33:40" in json.dumps(data_funcs.headways(date(year=2020, month=11, day=7), ["70061"]))
+    ]
+
+    for i in range(0, len(checks)):
+        try:
+            checks[i] = checks[i]()
+        except Exception:
+            checks[i] = False
+
+    if all(checks):
+        return {
+            "status": "pass"
+        }
+
+    return Response(body={
+        "status": "fail",
+        "check_failed": checks.index(False),
+    }, status_code=500)
+
+
 @app.route("/headways/{user_date}", cors=cors_config)
 def headways_route(user_date):
     date = parse_user_date(user_date)
-    stop = app.current_request.query_params["stop"]
-    return data_funcs.headways(date, [stop])
+    stops = app.current_request.query_params.getlist("stop")
+    return data_funcs.headways(date, stops)
 
 
 @app.route("/dwells/{user_date}", cors=cors_config)
 def dwells_route(user_date):
     date = parse_user_date(user_date)
-    stop = app.current_request.query_params["stop"]
-    return data_funcs.dwells(date, [stop])
+    stops = app.current_request.query_params.getlist("stop")
+    return data_funcs.dwells(date, stops)
 
 
 @app.route("/traveltimes/{user_date}", cors=cors_config)
 def traveltime_route(user_date):
     date = parse_user_date(user_date)
-    from_stop = app.current_request.query_params["from_stop"]
-    to_stop = app.current_request.query_params["to_stop"]
-    return data_funcs.travel_times(date, [from_stop], [to_stop])
+    from_stops = app.current_request.query_params.getlist("from_stop")
+    to_stops = app.current_request.query_params.getlist("to_stop")
+    return data_funcs.travel_times(date, from_stops, to_stops)
 
 
 @app.route("/alerts/{user_date}", cors=cors_config)
@@ -78,10 +95,21 @@ def alerts_route(user_date):
 def traveltime_aggregate_route():
     sdate = parse_user_date(app.current_request.query_params["start_date"])
     edate = parse_user_date(app.current_request.query_params["end_date"])
-    from_stop = app.current_request.query_params["from_stop"]
-    to_stop = app.current_request.query_params["to_stop"]
+    from_stops = app.current_request.query_params.getlist("from_stop")
+    to_stops = app.current_request.query_params.getlist("to_stop")
 
-    response = aggregation.travel_times_over_time(sdate, edate, from_stop, to_stop)
+    response = aggregation.travel_times_over_time(sdate, edate, from_stops, to_stops)
+    return json.dumps(response, indent=4, sort_keys=True, default=str)
+
+
+@app.route("/aggregate/traveltimes2", cors=cors_config)
+def traveltime_aggregate_route_2():
+    sdate = parse_user_date(app.current_request.query_params["start_date"])
+    edate = parse_user_date(app.current_request.query_params["end_date"])
+    from_stop = app.current_request.query_params.getlist("from_stop")
+    to_stop = app.current_request.query_params.getlist("to_stop")
+
+    response = aggregation.travel_times_all(sdate, edate, from_stop, to_stop)
     return json.dumps(response, indent=4, sort_keys=True, default=str)
 
 
@@ -89,9 +117,9 @@ def traveltime_aggregate_route():
 def headways_aggregate_route():
     sdate = parse_user_date(app.current_request.query_params["start_date"])
     edate = parse_user_date(app.current_request.query_params["end_date"])
-    stop = app.current_request.query_params["stop"]
+    stops = app.current_request.query_params.getlist("stop")
 
-    response = aggregation.headways_over_time(sdate, edate, stop)
+    response = aggregation.headways_over_time(sdate, edate, stops)
     return json.dumps(response, indent=4, sort_keys=True, default=str)
 
 
@@ -99,7 +127,17 @@ def headways_aggregate_route():
 def dwells_aggregate_route():
     sdate = parse_user_date(app.current_request.query_params["start_date"])
     edate = parse_user_date(app.current_request.query_params["end_date"])
-    stop = app.current_request.query_params["stop"]
+    stops = app.current_request.query_params.getlist("stop")
 
-    response = aggregation.dwells_over_time(sdate, edate, stop)
+    response = aggregation.dwells_over_time(sdate, edate, stops)
     return json.dumps(response, indent=4, sort_keys=True, default=str)
+
+
+@app.route("/git_id", cors=cors_config)
+def get_git_id():
+    # Only do this on localhost
+    if TM_FRONTEND_HOST == "localhost":
+        git_id = str(subprocess.check_output(['git', 'describe', '--always', '--dirty', '--abbrev=10']))[2:-3]
+        return json.dumps({"git_id": git_id})
+    else:
+        raise ConflictError("Cannot get git id from serverless host")
